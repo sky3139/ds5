@@ -144,7 +144,7 @@ def create_road_seg_dataloader(path, clsnum, imgsz, batch_size, stride, single_c
                                          pad=pad,
                                          image_weights=image_weights,
                                          prefix=prefix)
-
+    print(batch_size,len(dataset))
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count() // WORLD_SIZE, batch_size if batch_size > 1 else 0, workers])  # number of workers
     sampler = None if rank == -1 else distributed.DistributedSampler(dataset, shuffle=shuffle)
@@ -457,7 +457,7 @@ class LoadImagesAndLabels(Dataset):
             for p in path if isinstance(path, list) else [path]:
                 p = Path(p)  # os-agnostic
                 if p.is_dir():  # dir
-                    f += glob.glob(str(p / '**' / '*.*'), recursive=True)
+                    f += glob.glob(str(p / '**' / '*.jpg'), recursive=True)
                     # f = list(p.rglob('*.*'))  # pathlib
                 elif p.is_file():  # file
                     with open(p) as t:
@@ -758,7 +758,7 @@ class LoadSegImagesAndLabels(Dataset):
             for p in path if isinstance(path, list) else [path]:
                 p = Path(p)  # os-agnostic
                 if p.is_dir():  # dir
-                    f += glob.glob(str(p / '**' / '*.*'), recursive=True)
+                    f += glob.glob(str(p / '**' / '*.jpg'), recursive=True)
                     # f = list(p.rglob('*.*'))  # pathlib
                 elif p.is_file():  # file
                     with open(p) as t:
@@ -774,13 +774,14 @@ class LoadSegImagesAndLabels(Dataset):
             assert self.img_files, f'{prefix}No images found'
         except Exception as e:
             raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
+        # self.img_files=glob.glob(str(p / '**' / '*.jpg'))
 
         # Check cache
         self.label_files = segimg2label_paths(self.img_files)  # labels
         # if prefix == colorstr('train: '):
         labelcounter = []
         for img in self.label_files:
-            image = cv2.imread(img, cv2.IMREAD_GRAYSCALE)
+            image = cv2.imread(img,-1)
             num = image.flatten().tolist()
             labelcounter.extend(num)
 

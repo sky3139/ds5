@@ -1,0 +1,14 @@
+# Train/val/test sets as 1) dir: path/to/imgs, 2) file: path/to/imgs.txt, or 3) list: [path/to/imgs1, path/to/imgs2, ..]
+path: . # dataset root dir
+train: /home/data/1441 # train images (relative to 'path') 118287 images
+val: /home/data/1441 # train images (relative to 'path') 5000 images
+road_seg_train: /home/data/1441 # road segmentation data
+road_seg_val: /home/data/1441
+
+# Classes
+nc: 10
+segnc: 4
+
+names: ["car","van","bus","open_bed_heavy_truck","close_bed_heavy_truck","open_bed_light_truck","close_bed_light_truck","others_truck","back_plate","side_plate"] # class names
+
+segnames: ["bg","truck_bed_cover", "dirt","empty_bed"]

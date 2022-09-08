@@ -5,6 +5,25 @@ Train a YOLOv5 Det & Seg model on a custom dataset
 Usage:
     $ python path/to/train.py --data coco128.yaml --weights yolov5s.pt --img 640
 """
+from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
+from utils.plots import plot_evolve, plot_labels
+from utils.metrics import fitness
+from utils.loss import ComputeLoss
+from utils.loggers.wandb.wandb_utils import check_wandb_resume
+from utils.loggers import Loggers
+from utils.general import (LOGGER, check_dataset, check_file, check_git_status, check_img_size, check_requirements,
+                           check_suffix, check_yaml, colorstr, get_latest_run, increment_path, init_seeds,
+                           intersect_dicts, labels_to_class_weights, labels_to_image_weights, methods, one_cycle,
+                           print_args, print_mutation, strip_optimizer)
+from utils.downloads import attempt_download
+from utils.datasets import create_dataloader, create_road_seg_dataloader
+from utils.callbacks import Callbacks
+from utils.autobatch import check_train_batch_size
+from utils.autoanchor import check_anchors
+from models.yolodhs import Model
+from models.experimental import attempt_load
+import segval
+import val  # for end-of-epoch mAP
 import argparse
 import math
 import os
@@ -31,30 +50,10 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-import val  # for end-of-epoch mAP
-import segval
-from models.experimental import attempt_load
-from models.yolodhs import Model
-from utils.autoanchor import check_anchors
-from utils.autobatch import check_train_batch_size
-from utils.callbacks import Callbacks
-from utils.datasets import create_dataloader, create_road_seg_dataloader
-from utils.downloads import attempt_download
-from utils.general import (LOGGER, check_dataset, check_file, check_git_status, check_img_size, check_requirements,
-                           check_suffix, check_yaml, colorstr, get_latest_run, increment_path, init_seeds,
-                           intersect_dicts, labels_to_class_weights, labels_to_image_weights, methods, one_cycle,
-                           print_args, print_mutation, strip_optimizer)
-from utils.loggers import Loggers
-from utils.loggers.wandb.wandb_utils import check_wandb_resume
-from utils.loss import ComputeLoss
-from utils.metrics import fitness
-from utils.plots import plot_evolve, plot_labels
-from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
 
 LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
 RANK = int(os.getenv('RANK', -1))
-WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
-
+WORLD_SIZE =1 # int(os.getenv('WORLD_SIZE', 1))
 
 
 def train(hyp,  # path/to/hyp.yaml or hyp dictionary
@@ -79,11 +78,11 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     LOGGER.info(colorstr('hyperparameters: ') + ', '.join(f'{k}={v}' for k, v in hyp.items()))
 
     # Save run settings
-    if not evolve:
-        with open(save_dir / 'hyp.yaml', 'w') as f:
-            yaml.safe_dump(hyp, f, sort_keys=False)
-        with open(save_dir / 'opt.yaml', 'w') as f:
-            yaml.safe_dump(vars(opt), f, sort_keys=False)
+    # if not evolve:
+    # with open(save_dir / 'hyp.yaml', 'w') as f:
+    #     yaml.safe_dump(hyp, f, sort_keys=False)
+    # with open(save_dir / 'opt.yaml', 'w') as f:
+    #     yaml.safe_dump(vars(opt), f, sort_keys=False)
 
     # Loggers
     data_dict = None
@@ -121,7 +120,8 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         with torch_distributed_zero_first(LOCAL_RANK):
             weights = attempt_download(weights)  # download if not found locally
         ckpt = torch.load(weights, map_location=device)  # load checkpoint
-        model = Model(cfg or ckpt['model'].yaml, segcfg, ch=3, nc=nc, segnc=segnc, anchors=hyp.get('anchors')).to(device)  # create
+        model = Model(cfg or ckpt['model'].yaml, segcfg, ch=3, nc=nc, segnc=segnc,
+                      anchors=hyp.get('anchors')).to(device)  # create
         exclude = ['anchor'] if (cfg or hyp.get('anchors')) and not resume else []  # exclude keys
         csd = ckpt['model'].float().state_dict()  # checkpoint state_dict as FP32
         csd = intersect_dicts(csd, model.state_dict(), exclude=exclude)  # intersect
@@ -174,7 +174,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 
     # Scheduler
     if opt.linear_lr:
-        lf = lambda x: (1 - x / (epochs - 1)) * (1.0 - hyp['lrf']) + hyp['lrf']  # linear
+        def lf(x): return (1 - x / (epochs - 1)) * (1.0 - hyp['lrf']) + hyp['lrf']  # linear
     else:
         lf = one_cycle(1, hyp['lrf'], epochs)  # cosine 1->hyp['lrf']
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lf)  # plot_lr_scheduler(optimizer, scheduler, epochs)
@@ -223,7 +223,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                                            rank=LOCAL_RANK,
                                                            workers=workers, image_weights=opt.image_weights,
                                                            quad=opt.quad,
-                                                           prefix=colorstr('train: '), shuffle=True)
+                                                           prefix=colorstr('train: '), shuffle=False)
 
     # Road Segmentation Trainloader
     roadseg_train_loader, roadseg_dataset = create_road_seg_dataloader(roadseg_train_path, segnc, imgsz,
@@ -234,7 +234,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                                                        rank=LOCAL_RANK,
                                                                        workers=workers, image_weights=opt.image_weights,
                                                                        quad=opt.quad,
-                                                                       prefix=colorstr('train: '), shuffle=True)
+                                                                       prefix=colorstr('train: '), shuffle=False)
 
     # print("cls balance :",cls_balance)
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
@@ -250,7 +250,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                                        prefix=colorstr('val: '))[0]
 
         roadseg_val_loader = create_road_seg_dataloader(roadseg_val_path, segnc, imgsz, batch_size // WORLD_SIZE * 2, gs,
-                                                        single_cls,hyp=hyp, cache=None if noval else opt.cache, rect=False, rank=-1,
+                                                        single_cls, hyp=hyp, cache=None if noval else opt.cache, rect=False, rank=-1,
                                                         workers=workers, pad=0.5,
                                                         prefix=colorstr('val: '))[0]
 
@@ -394,11 +394,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 # callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, opt.sync_bn)
             # end batch ------------------------------------------------------------------------------------------------
 
-
         if RANK in [-1, 0]:
             # mIOU
             if not noval or final_epoch:  # Calculate mAP
-                ave_loss, mean_IoU, IoU_array = segval.validate(roadseg_val_loader, model, segnc,SegLoss )
+                ave_loss, mean_IoU, IoU_array = segval.validate(roadseg_val_loader, model, segnc, SegLoss)
 
         # Scheduler
         lr = [x['lr'] for x in optimizer.param_groups]  # for loggers
@@ -501,9 +500,9 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
 def parse_opt(known=False):
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default=ROOT / 'yolov5s.pt', help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='', help='model.yaml path')
+    parser.add_argument('--cfg', type=str, default='models/yolov5s.yaml', help='models/yolov5s.yaml path')
     parser.add_argument('--segcfg', type=str, default='models/segheads.yaml', help='segmentation head yaml path')
-    parser.add_argument('--data', type=str, default=ROOT / 'data/voc.yaml', help='dataset.yaml path')
+    parser.add_argument('--data', type=str, default=ROOT / 'data/1441.yaml', help='dataset.yaml path')
     parser.add_argument('--hyp', type=str, default=ROOT / 'data/hyps/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
     parser.add_argument('--batch-size', type=int, default=8, help='total batch size for all GPUs, -1 for autobatch')
@@ -517,7 +516,7 @@ def parse_opt(known=False):
     parser.add_argument('--bucket', type=str, default='', help='gsutil bucket')
     parser.add_argument('--cache', type=str, nargs='?', const='ram', help='--cache images in "ram" (default) or "disk"')
     parser.add_argument('--image-weights', action='store_true', help='use weighted image selection for training')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
     parser.add_argument('--single-cls', action='store_true', help='train multi-class data as single-class')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
