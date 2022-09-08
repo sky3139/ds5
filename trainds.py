@@ -239,7 +239,6 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
     # print("cls balance :",cls_balance)
     mlc = int(np.concatenate(dataset.labels, 0)[:, 0].max())  # max label class
     nb = len(train_loader)  # number of batches
-    snb = len(roadseg_train_loader)
     assert mlc < nc, f'Label class {mlc} exceeds nc={nc} in {data}. Possible class labels are 0-{nc - 1}'
 
     # Process 0
@@ -316,15 +315,11 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
         # dataset.mosaic_border = [b - imgsz, -b]  # height, width borders
 
         mloss = torch.zeros(3, device=device)  # mean losses
-        sloss = torch.zeros(1, device=device)  # segmentation mean loss
         if RANK != -1:
             train_loader.sampler.set_epoch(epoch)
         pbar = enumerate(train_loader)
-        segpbar = enumerate(roadseg_train_loader)
         ############################ detection ######################
-        LOGGER.info(('\n' + '%10s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
-        if RANK in [-1, 0]:
-            pbar = tqdm(pbar, total=nb, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')  # progress bar
+        print(('%s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
         optimizer.zero_grad()
         seg_batch_iter = iter(roadseg_train_loader)
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
@@ -385,10 +380,10 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
                 last_opt_step = ni
 
             # Log
-            if RANK in [-1, 0]:
+            if RANK in [-1, 0] and i%10==0:
                 mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
                 mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
-                pbar.set_description(('%10s' * 2 + '%10.4g' * 5) % (
+                print(('%s' * 2 + '%10.4g' * 5) % (
                     f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
                 # print("on_train_batch_end:",imgs.shape, targets.shape)
                 # callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, opt.sync_bn)
