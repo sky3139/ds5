@@ -17,7 +17,7 @@ import torch.nn as nn
 np.set_printoptions(suppress=True)
 
 ROI_COLOR = ["blue", "green", "red", "yellow"]
-
+MODE="test"
 
 def colorEncode(labelmap, colors, mode='RGB'):
     labelmap = labelmap.astype('int')
@@ -101,7 +101,8 @@ def xyxy2lxlywh(x):
     y[:, 3] = x[:, 3] - x[:, 1]  # height
     return y
 
-
+mode_papth="/project/train/models/best.pt"
+color_path="/project/train/models/color.pt"
 class MyMode():
 
     @torch.no_grad()
@@ -183,7 +184,8 @@ class MyMode():
                 maskcolor = cv2.resize(
                     pred_color, (im0.shape[1], im0.shape[0]))
                 im_vis = cv2.addWeighted(im0, 0.6, maskcolor, 0.4, 1)
-                cv2.imwrite("res.png", im_vis)
+                if MODE=="debug":
+                    cv2.imwrite("res.png", im_vis)
         if False:
             # update model (to fix SourceChangeWarning)
             strip_optimizer(weights)
@@ -206,13 +208,13 @@ class MyMode():
     def __init__(self) -> None:
 
         self.device = select_device(0)
-        mode_papth="/project/train/models/best.pt"
+        
         if os.path.exists(mode_papth):
             ckpts = torch.load(mode_papth)
         else:
             ckpts = torch.load("/project/ev_sdk/src/runs/best.pt")
 
-        if os.path.exists("/project/train/models/color.pt"):
+        if os.path.exists(color_path):
             self.color_model = torch.load("/project/train/models/color.pt")
         else:
             self.color_model = torch.load("/project/ev_sdk/src/runs/color.pt")
@@ -326,12 +328,13 @@ def process_image(net, input_image, args=None):
 
 
 if __name__ == "__main__":
-
+    mode_papth="runs/car.pt"
+    MODE="debug"
+    color_path="runs/color_m.pt"
     predictor = init()
-    original_image = cv2.imread('demo.jpg')   # 读取图片
+    original_image = cv2.imread('images/demo.jpg')   # 读取图片
     args = {"mask_output_path": "mask.png"}
-
     result = process_image(predictor, original_image, json.dumps(args))
     # print(result)
-    with open('data.json', 'w', encoding='utf-8') as file:
+    with open('images/data.json', 'w', encoding='utf-8') as file:
         file.write(result)

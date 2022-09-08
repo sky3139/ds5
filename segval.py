@@ -1,24 +1,8 @@
-# YOLOv5 🚀 by Ultralytics, GPL-3.0 license
-"""
-Validate a trained YOLOv5 model accuracy on a custom dataset
 
-Usage:
-    $ python path/to/val.py --data coco128.yaml --weights yolov5s.pt --img 640
-"""
-
-import argparse
-import json
-import os
-import sys
-from pathlib import Path
-from threading import Thread
 from utils.general import LOGGER
 
 import numpy as np
 import torch
-from tqdm import tqdm
-
-
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -87,11 +71,10 @@ def validate(testloader, model, numcls, criterion):
     ave_loss = AverageMeter()
     confusion_matrix = np.zeros((numcls, numcls))
 
-    s = ('%11s' * 3) % ('Images', 'Ave Loss', 'mIOU')
-    pbar = tqdm(testloader, desc=s, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}')  # progress bar
-
+    s = ('%s'+'%11s' * 2) % ('Images', 'Ave Loss', 'mIOU')
+    print(s)
     with torch.no_grad():
-        for idx, batch in enumerate(pbar):
+        for idx, batch in enumerate(testloader):
             image, label, _, _ = batch
             size = label.size()
             image = image.cuda().float()/255
@@ -117,6 +100,6 @@ def validate(testloader, model, numcls, criterion):
         tp = np.diag(confusion_matrix)
         IoU_array = (tp / np.maximum(1.0, pos + res - tp))
         mean_IoU = IoU_array.mean()
-    LOGGER.info('%11g' * 3 % (len(testloader), ave_loss.average(), mean_IoU))
+    print('%7g' * 3 % (len(testloader), ave_loss.average(), mean_IoU))
 
     return ave_loss.average(), mean_IoU, IoU_array

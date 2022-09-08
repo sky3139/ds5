@@ -319,7 +319,7 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             train_loader.sampler.set_epoch(epoch)
         pbar = enumerate(train_loader)
         ############################ detection ######################
-        print(('%s' * 7) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'labels', 'img_size'))
+        print(('%s    '+'%6s' * 6) % ('Ep', 'gpumem', 'box', 'obj', 'cls', 'labels', 'imgsize'))
         optimizer.zero_grad()
         seg_batch_iter = iter(roadseg_train_loader)
         for i, (imgs, targets, paths, _) in pbar:  # batch -------------------------------------------------------------
@@ -382,14 +382,14 @@ def train(hyp,  # path/to/hyp.yaml or hyp dictionary
             # Log
             if RANK in [-1, 0] and i%10==0:
                 mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
-                mem = f'{torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
-                print(('%s' * 2 + '%10.4g' * 5) % (
+                mem = f'   {torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0:.3g}G'  # (GB)
+                print(('%2s' * 2 + '%8.4g' * 5) % (
                     f'{epoch}/{epochs - 1}', mem, *mloss, targets.shape[0], imgs.shape[-1]))
                 # print("on_train_batch_end:",imgs.shape, targets.shape)
                 # callbacks.run('on_train_batch_end', ni, model, imgs, targets, paths, plots, opt.sync_bn)
             # end batch ------------------------------------------------------------------------------------------------
 
-        if RANK in [-1, 0]:
+        if RANK in [-1, 0] and i%3==0:
             # mIOU
             if not noval or final_epoch:  # Calculate mAP
                 ave_loss, mean_IoU, IoU_array = segval.validate(roadseg_val_loader, model, segnc, SegLoss)
