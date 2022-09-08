@@ -144,11 +144,12 @@ def create_road_seg_dataloader(path, clsnum, imgsz, batch_size, stride, single_c
                                          pad=pad,
                                          image_weights=image_weights,
                                          prefix=prefix)
-    print(batch_size,len(dataset))
+    print(batch_size, len(dataset))
     batch_size = min(batch_size, len(dataset))
     nw = min([os.cpu_count() // WORLD_SIZE, batch_size if batch_size > 1 else 0, workers])  # number of workers
     sampler = None if rank == -1 else distributed.DistributedSampler(dataset, shuffle=shuffle)
-    loader = InfiniteSegDataLoader if prefix==colorstr('train: ') else DataLoader  # only DataLoader allows for attribute updates
+    loader = InfiniteSegDataLoader if prefix == colorstr(
+        'train: ') else DataLoader  # only DataLoader allows for attribute updates
     return loader(dataset,
                   batch_size=batch_size,
                   shuffle=shuffle and sampler is None,
@@ -581,8 +582,7 @@ class LoadImagesAndLabels(Dataset):
         nm, nf, ne, nc, msgs = 0, 0, 0, 0, []  # number missing, found, empty, corrupt, messages
         desc = f"{prefix}Scanning '{path.parent / path.stem}' images and labels..."
         with Pool(NUM_THREADS) as pool:
-            pbar = tqdm(pool.imap(verify_image_label, zip(self.img_files, self.label_files, repeat(prefix))),
-                        desc=desc, total=len(self.img_files))
+            pbar = pool.imap(verify_image_label, zip(self.img_files, self.label_files, repeat(prefix)))
             for im_file, l, shape, segments, nm_f, nf_f, ne_f, nc_f, msg in pbar:
                 nm += nm_f
                 nf += nf_f
@@ -592,9 +592,8 @@ class LoadImagesAndLabels(Dataset):
                     x[im_file] = [l, shape, segments]
                 if msg:
                     msgs.append(msg)
-                pbar.desc = f"{desc}{nf} found, {nm} missing, {ne} empty, {nc} corrupted"
+            print(f"{desc}{nf} found, {nm} missing, {ne} empty, {nc} corrupted")
 
-        pbar.close()
         if msgs:
             LOGGER.info('\n'.join(msgs))
         if nf == 0:
@@ -752,39 +751,28 @@ class LoadSegImagesAndLabels(Dataset):
         self.stride = stride
         self.path = path
         self.albumentations = SegAlbumentations() if augment else None
-
-        try:
-            f = []  # image files
-            for p in path if isinstance(path, list) else [path]:
-                p = Path(p)  # os-agnostic
-                if p.is_dir():  # dir
-                    f += glob.glob(str(p / '**' / '*.jpg'), recursive=True)
-                    # f = list(p.rglob('*.*'))  # pathlib
-                elif p.is_file():  # file
-                    with open(p) as t:
-                        t = t.read().strip().splitlines()
-                        parent = str(p.parent) + os.sep
-                        f += [x.replace('./', parent) if x.startswith('./') else x for x in t]  # local to global path
-                        # f += [p.parent / x.lstrip(os.sep) for x in t]  # local to global path (pathlib)
-                else:
-                    raise Exception(f'{prefix}{p} does not exist')
-            self.img_files = sorted(x.replace('/', os.sep) for x in f if x.split('.')[-1].lower() in IMG_FORMATS)
-
-            # self.img_files = sorted([x for x in f if x.suffix[1:].lower() in IMG_FORMATS])  # pathlib
-            assert self.img_files, f'{prefix}No images found'
-        except Exception as e:
-            raise Exception(f'{prefix}Error loading data from {path}: {e}\nSee {HELP_URL}')
-        # self.img_files=glob.glob(str(p / '**' / '*.jpg'))
+        self.img_files = glob.glob('/home/data/1441/*.jpg')
 
         # Check cache
-        self.label_files = segimg2label_paths(self.img_files)  # labels
+        self.label_files = [v[:-3] + "png" for v in self.img_files]  # segimg2label_paths(self.img_files)  # labels
         # if prefix == colorstr('train: '):
         labelcounter = []
-        for img in self.label_files:
-            image = cv2.imread(img,-1)
-            num = image.flatten().tolist()
-            labelcounter.extend(num)
-
+        remodve_id = []
+        for i, img in enumerate(self.label_files):
+            try:
+                print(img)
+                image = cv2.imread(img,-1)
+                print(image.shape)
+                num = image.flatten().tolist()
+                assert len(num)
+                labelcounter.extend(num)
+            except Exception as e:
+                remodve_id.append(i)
+                print(i, img, e)
+        print("remodve_id:", len(remodve_id))
+        for i in remodve_id:
+            self.label_files.pop(i)
+            self.label_files.pop(i)
         labelcounter = Counter(labelcounter)
         labelcounter = dict(labelcounter)
         segcls = sorted(list(labelcounter.keys()))
@@ -814,7 +802,7 @@ class LoadSegImagesAndLabels(Dataset):
         index = self.indices[index]  # linear, shuffled, or image_weights
         hyp = self.hyp
         # mosaic = self.mosaic and random.random() < hyp['mosaic']
-        mosaic = 0.5  ### masic ratio
+        mosaic = 0.5  # masic ratio
         if random.random() < mosaic and not self.val:
             # print("using segmentation masic ...")
             # Load mosaic

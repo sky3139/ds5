@@ -186,31 +186,16 @@ def to_color_2d():
     for i, xml_path in enumerate(xmls):
         reader = XmlTester()
         im_shape, bbox = reader.load(xml_path, True)
+    return img_s_sum,label_150
     # wb是覆盖写，如果需要追加，则为‘ab'
-    datas = {'img': img_s_sum, 'label': label_150}
-    f = open('data.pkl', 'wb')
-    # size=os.path.getsize("data.pkl")
-    data = pickle.dump(datas, f, -1)
-    f.close()
-    print(f"img len:  {size}", len(img_s_sum))
+    # datas = {'img': img_s_sum, 'label': label_150}
+    # f = open('data.pkl', 'wb')
+    # data = pickle.dump(datas, f, -1)
+    # f.close()
+if __name__ == "__main__":
+    start_time = datetime.datetime.now()  # 记录程序开始执行的当前时间
+    to_color_2d()
+    stop_time = datetime.datetime.now()  # 记录执行结束的当前时间
+    func_time = stop_time-start_time  # 得到中间功能的运行时间
+    print("func is running %s s" % func_time)
 
-start_time = datetime.datetime.now()  # 记录程序开始执行的当前时间
-to_color_2d()
-stop_time = datetime.datetime.now()  # 记录执行结束的当前时间
-func_time = stop_time-start_time  # 得到中间功能的运行时间
-print("func is running %s s" % func_time)
-
-
-def FunctionName():
-
-    xmls = glob.glob("%s/1441/*.xml" % ROOT_PATH)
-
-    os.system("mkdir -p rename")
-
-    for i, xml_path in enumerate(xmls):
-        img_path = xml_path[:-3]+"jpg"
-        # print(img_path,xml_path)
-        os.system(f"cp {img_path} rename/{i}.jpg")
-        os.system(f"cp {xml_path} rename/{i}.xml")
-        # os.rename(xml_path,"rename/%d.xml"%i)
-# FunctionName()

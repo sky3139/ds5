@@ -188,11 +188,11 @@ class LoadImages_pkl:
             r = XmlTester()
             read = r.load(xmlp, True)
 
-    def __init__(self, path, img_size=150, stride=32, auto=True):
-
-        data = pickle.load(open("data.pkl", "rb"))
-        self.imgs = data['img']
-        self.lbs = data["label"]
+    def __init__(self, path=None, data=None,img_size=150, stride=32, auto=True):
+        if path is not None:
+            data = pickle.load(open("data.pkl", "rb"))
+        self.imgs = data['images']
+        self.lbs = data["labels"]
         self.nf = len(self.imgs)  # number of files
         self.rand = np.arange(0, self.nf)
         np.random.seed()
@@ -227,7 +227,7 @@ class LoadImages_pkl:
 
 
 class cy():
-    def __init__(self, weight=None):
+    def __init__(self, weight=None,dl=None):
         # if weight==None else torch.load(weight)
 
         if weight == None or not os.path.exists(weight):
@@ -243,7 +243,7 @@ class cy():
         self.criterion = nn.CrossEntropyLoss()  # 交叉熵，标签应该是0,1,2,3...的形式而不是独热的
         self.optimizer = optim.SGD(
             self.cnnmodel.parameters(), lr=0.0005, momentum=0.9)
-        self.dataloader = LoadImages_pkl(8)
+        self.dataloader =dl 
         self.epoch=0
 
     def train(self, data=None):
@@ -313,10 +313,11 @@ class cy():
         self.cnnmodel.load_state_dict(checkpoint["state_dict"])
         self.epoch = checkpoint["epoch"] + 1
 #
-
+import gencolor
 def train_test():
+    img,lbs=gencolor.to_color_2d()
     # ccc=cy(weight="/project/train/models/color.pt")
-    ccc=cy()
+    ccc=cy(dl=LoadImages_pkl(path=None,data={"images":img,"labels":lbs}))
     ccc.save_name="color_m.pt"
     # ccc.save("/project/train/models/color1.pt")
     ccc.train()
