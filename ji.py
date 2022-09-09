@@ -172,7 +172,8 @@ class MyMode():
                     # normalized xywh
                     xywh = (xyxy2lxlywh(xyxy_h)).view(-1).tolist()
                     if c > 7:
-                        plate.append([list(xyxy_h.numpy()[0].reshape(-1, 2).astype(np.int32)), self.names[8], 0.7, False])
+                        pts=xyxy_h.numpy()[0].reshape(-1)
+                        plate.append([[int(p) for p in pts], self.names[8], conf.tolist(), False])
                     else:
                         objs.append([*xywh, self.names[c], conf.tolist()])
                     # print()

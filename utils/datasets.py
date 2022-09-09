@@ -3,6 +3,7 @@
 Dataloaders and dataset utils
 """
 
+from ast import Delete
 import glob
 import hashlib
 import json
@@ -751,38 +752,31 @@ class LoadSegImagesAndLabels(Dataset):
         self.stride = stride
         self.path = path
         self.albumentations = SegAlbumentations() if augment else None
-        self.img_files = glob.glob('/home/data/1441/*.jpg')
-
-        # Check cache
-        self.label_files = [v[:-3] + "png" for v in self.img_files]  # segimg2label_paths(self.img_files)  # labels
-        # if prefix == colorstr('train: '):
+        # self.img_files = glob.glob('/home/data/1441/*.jpg')
+        import pickle
+        f=open("a.pkl",mode="rb")
+        self.md=pickle.load(f)
+         
+        f.close()
+        self.img_files=[]
         labelcounter = []
-        remodve_id = []
-        for i, img in enumerate(self.label_files):
-            try:
-                print(img)
-                image = cv2.imread(img,-1)
-                print(image.shape)
-                num = image.flatten().tolist()
-                assert len(num)
-                labelcounter.extend(num)
-            except Exception as e:
-                remodve_id.append(i)
-                print(i, img, e)
-        print("remodve_id:", len(remodve_id))
-        for i in remodve_id:
-            self.label_files.pop(i)
-            self.label_files.pop(i)
+        self.class_map = {'dirt': 2, 'bg': 0, "truck_bed_cover": 1, "empty_bed": 3}
+        for i,(im,s,pt) in enumerate(self.md):
+            image=self.point2img(i)
+            num = image.flatten().tolist()
+            labelcounter.extend(num)
+            self.img_files.append(im)
+            del image
         labelcounter = Counter(labelcounter)
         labelcounter = dict(labelcounter)
         segcls = sorted(list(labelcounter.keys()))
+        print(len(self.img_files),segcls)
         seg_weights = [labelcounter[i] for i in segcls]
         seg_weights_balance = [math.pow(i, 1 / 5) for i in seg_weights]
         self.seg_weights = [max(seg_weights_balance) / i for i in seg_weights_balance]
         # update label map
         for i, cls in enumerate(segcls):
             self.label_mapping[cls] = i
-
         self.indices = range(len(self.img_files))
 
     def __len__(self):
@@ -797,7 +791,14 @@ class LoadSegImagesAndLabels(Dataset):
             for k, v in self.label_mapping.items():
                 label[temp == k] = v
         return label
-
+    def point2img(self,idx):
+        _,s,polgs=self.md[idx]
+        image=np.zeros(s,dtype=np.uint8)
+        for nm,pt in polgs:
+            if len(pt):
+                points = np.array(pt, dtype=np.int32)
+                image=cv2.fillPoly(image, [points], color=(self.class_map[nm]*80,100,200))
+        return image
     def __getitem__(self, index):
         index = self.indices[index]  # linear, shuffled, or image_weights
         hyp = self.hyp
@@ -919,15 +920,13 @@ def load_image(self, i):
     else:
         return self.imgs[i], self.img_hw0[i], self.img_hw[i]  # im, hw_original, hw_resized
 
-
 def load_segimagelabel(self, i):
     # loads 1 image from dataset index 'i', returns im, original hw, resized hw
     path = self.img_files[i]
-    lpath = self.label_files[i]
     im = cv2.imread(path)  # BGR
-    label = cv2.imread(lpath, cv2.IMREAD_GRAYSCALE)  # BGR
+    
+    label =self.point2img(i)  # BGR
     assert im is not None, f'Image Not Found {path}'
-    assert label is not None, f'Image Not Found {lpath}'
     h0, w0 = im.shape[:2]  # orig hw
     r = self.img_size / max(h0, w0)  # ratio
     if r != 1:  # if sizes are not equal

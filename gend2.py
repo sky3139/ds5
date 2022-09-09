@@ -113,26 +113,18 @@ class XmlTester(XmlReader):
 
                 box=obj.getElementsByTagName(
                     'points')[0].childNodes[0].data.replace(";", ",").split(",")
-                self.polygon.append(
-                    [o_cls, np.array(box).astype(np.int32).reshape(-1, 2)])
+                
                 if class_name[-1] == str(o_cls) or class_name[-2] == str(o_cls):
                     self.obj_name.append(o_cls)
-                    _, pts=self.polygon[-1]
+                    pts=np.array(box).astype(np.int32).reshape(-1, 2)
                     # pts=np.array().as
                     a=pts.min(0)
                     b=pts.max(0)
                     self.bbox.append([a, b])
+                    continue
+                self.polygon.append(
+                    [o_cls, np.array(box).astype(np.int32).reshape(-1, 2)])
                     # print(self.bbox[-1])
-
-                    # self.bbox.append([[b_xmin, b_ymin], [b_xmax, b_ymax]])
-                    # print(o_cls,)
-                # if b_name=="open_bed_heavy_truck":
-                #     obj.getElementsByTagName("attribute")
-                # # if len(self.polygon[-1][1])==8:
-                #     # self.obj_name.append(b_name)
-                # print(b_name,)
-                    # assert()
-            # print(self.bbox)
             self.bbox=np.array(self.bbox)
             return self.im_shape, self.bbox
 
@@ -177,7 +169,7 @@ class XmlTester(XmlReader):
 def to_yolo_2d():
 
     xmls=glob.glob("%s/1441/*.xml" % ROOT_PATH)
-
+    data=[]
     for i, xml_path in enumerate(xmls):
         reader=XmlTester()
         im_shape, bbox=reader.load(xml_path)
@@ -189,7 +181,10 @@ def to_yolo_2d():
                 flb.write("%d %f %f %f %f\n" %
                           (indx, b_[0], b_[1], b_[2], b_[3]))
         flb.close()
+        data.append([xml_path[:-3]+"jpg",im_shape,reader.polygon.copy()])
+    import pickle
 
+    pickle.dump(data,open("a.pkl","wb"))
     print("xmls:", len(xmls))
 import datetime
 
@@ -198,3 +193,37 @@ to_yolo_2d()
 stop_time=datetime.datetime.now()  # 记录执行结束的当前时间
 func_time=stop_time-start_time  # 得到中间功能的运行时间
 print("func is running %s s" % func_time)
+
+
+import pickle
+f=open("a.pkl",mode="rb")
+md=pickle.load(f)
+img=np.zeros((1080,1920),dtype=np.uint8)
+
+
+class_map = {'dirt': 2, 'bg': 0, "truck_bed_cover": 1, "empty_bed": 3}
+
+def point2img(idx):
+    _,s,polgs=md[idx]
+    image=np.zeros(s,dtype=np.uint8)
+    for nm,pt in polgs:
+        if len(pt):
+            points = np.array(pt, dtype=np.int32)
+            image=cv2.fillPoly(image, [points], color=(class_map[nm]*80,100,200))
+    return image
+for i in range(10):
+    img=point2img(i)
+
+    cv2.imshow("a",img)
+    cv2.waitKey()
+# 
+
+
+# for nm,pg in (md[0][1]):
+#     print(nm,pg)
+#     points = np.array(pg, dtype=np.int32)
+#     img=cv2.fillPoly(img, [points], color=(class_map[nm]*80))
+# # print(img)
+# cv2.imshow("a",img)
+# cv2.waitKey()
+
